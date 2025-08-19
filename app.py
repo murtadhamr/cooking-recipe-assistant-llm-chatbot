@@ -7,14 +7,11 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate # 1. IMPORT PROMPT TEMPLATE
+from langchain.prompts import PromptTemplate
 
 # Load environment variables from .env file
 load_dotenv()
 
-# --- 2. DEFINE A CUSTOM PROMPT TEMPLATE ---
-# This template instructs the LLM on how to structure its response.
-# We use unique separators like '###' to make parsing reliable.
 prompt_template = """
 You are a friendly and helpful cooking assistant. Based on the recipe context provided below, please answer the user's question.
 
@@ -32,11 +29,9 @@ QUESTION:
 ANSWER:
 """
 
-# Create a PromptTemplate object
 PROMPT = PromptTemplate(
     template=prompt_template, input_variables=["context", "question"]
 )
-
 
 @st.cache_resource
 def load_and_process_data():
@@ -59,8 +54,6 @@ def load_and_process_data():
 
     llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.5)
 
-    # --- 3. UPDATE THE RAG CHAIN TO USE OUR CUSTOM PROMPT ---
-    # We pass our custom prompt into the chain's configuration.
     chain_type_kwargs = {"prompt": PROMPT}
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
@@ -83,32 +76,35 @@ try:
     if st.button("Get Recipe"):
         if user_question:
             with st.spinner("Finding the perfect recipe..."):
-                response = qa_chain.invoke(user_question)
-                response_text = response['result']
+                # --- NEW: Check if any relevant documents are found FIRST ---
+                retriever = qa_chain.retriever
+                retrieved_docs = retriever.invoke(user_question)
 
-                # --- 4. PARSE AND DISPLAY THE STRUCTURED RESPONSE ---
-                try:
-                    # Split the response into the three parts using our unique separators
-                    parts = response_text.split('### Ingredients')
-                    bridging_words = parts[0].strip()
-                    
-                    ing_and_inst = parts[1].split('### Instructions')
-                    ingredients = ing_and_inst[0].strip()
-                    instructions = ing_and_inst[1].strip()
+                if not retrieved_docs:
+                    # If the retriever returns an empty list, show a custom message
+                    st.warning("I'm sorry, I couldn't find that recipe in my cookbook. Please try another one!")
+                else:
+                    # If documents are found, proceed with the LLM call as before
+                    response = qa_chain.invoke(user_question)
+                    response_text = response['result']
 
-                    # Display the structured output
-                    st.markdown(bridging_words)
-                    
-                    st.subheader("Ingredients")
-                    st.markdown(ingredients)
-                    
-                    st.subheader("Instructions")
-                    st.markdown(instructions)
+                    try:
+                        parts = response_text.split('### Ingredients')
+                        bridging_words = parts[0].strip()
+                        
+                        ing_and_inst = parts[1].split('### Instructions')
+                        ingredients = ing_and_inst[0].strip()
+                        instructions = ing_and_inst[1].strip()
 
-                except (IndexError, ValueError):
-                    # If the model fails to follow the format, display the raw response
-                    st.warning("The model provided a response, but it couldn't be automatically structured. Here is the raw output:")
-                    st.write(response_text)
+                        st.markdown(bridging_words)
+                        st.subheader("Ingredients")
+                        st.markdown(ingredients)
+                        st.subheader("Instructions")
+                        st.markdown(instructions)
+
+                    except (IndexError, ValueError):
+                        st.warning("The model provided a response, but it couldn't be automatically structured. Here is the raw output:")
+                        st.write(response_text)
         else:
             st.warning("Please ask a question first!")
 
