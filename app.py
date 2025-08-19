@@ -52,7 +52,7 @@ def load_and_process_data():
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vector_store = FAISS.from_documents(texts, embeddings)
 
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.5)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.5)
 
     chain_type_kwargs = {"prompt": PROMPT}
     qa_chain = RetrievalQA.from_chain_type(
